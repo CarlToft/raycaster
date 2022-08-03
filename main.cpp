@@ -1,4 +1,5 @@
 #include <SDL2/SDL.h>
+#include <SDL2/SDL_image.h>
 #include <cmath>
 #include <iostream>
 
@@ -8,6 +9,8 @@ const int WIDTH = 640;
 const int HEIGHT = 480;
 const double PIXELS_PER_CELL = 70; 
 const double PI = 3.1415926535897932384626; 
+SDL_Surface* wall_surface; 
+SDL_Texture* wall_texture;
 
 bool MAP[MAP_HEIGHT][MAP_WIDTH] = {
     {true, true, true, true, true, true, true, true, true, true},
@@ -42,7 +45,7 @@ Player::Player() {
     fov = 90.0; // in degrees 
     speed = 0.0; 
     angular_velocity = 0.0; 
-    angle_visualizer_length = 1.5;
+    angle_visualizer_length = 5.0;
 }
 
 void initMap() {
@@ -91,7 +94,7 @@ double intersectWithVerticalLine(double x, double y, double angle, double x_line
     return ((x_line - x)/cos_theta);
 }
 
-double shootRayOptimized(double x_start, double y_start, double angle) {
+double shootRayOptimized(double x_start, double y_start, double angle, bool& hit_horizontal) {
     int curr_x = int(floor(x_start));
     int curr_y = int(floor(y_start));
 
@@ -117,15 +120,19 @@ double shootRayOptimized(double x_start, double y_start, double angle) {
         if (horizontal_line_distance < vertical_line_distance) {
             // We intersected the horizontal line
             curr_y = curr_y + delta_y;
-            if (MAP[curr_y][curr_x] == true)
+            if (MAP[curr_y][curr_x] == true) {
+                hit_horizontal = true;
                 return horizontal_line_distance;
+            }
 
             y_line = y_line + delta_y;
             horizontal_line_distance = intersectWithHorizontalLine(x_start, y_start, angle, y_line);
         } else {
             curr_x = curr_x + delta_x;
-            if (MAP[curr_y][curr_x] == true)
+            if (MAP[curr_y][curr_x] == true) {
+                hit_horizontal = false;
                 return vertical_line_distance;
+            }
 
             x_line = x_line + delta_x;
             vertical_line_distance = intersectWithVerticalLine(x_start, y_start, angle, x_line);
@@ -222,9 +229,10 @@ void renderTopDownMap(SDL_Window* window, SDL_Renderer* renderer, Player& player
     SDL_SetRenderDrawColor(renderer, 0, 255, 0, SDL_ALPHA_OPAQUE);
     double focal_length = WIDTH/(2.0*tan(player.fov/2.0*PI/180.0));
     double depth = 0.0, angle = 0.0; 
+    bool hit_horizontal = false;
     for (int pixel_col = 0; pixel_col < WIDTH; pixel_col += 8) {
         angle = player.angle + atan((pixel_col - WIDTH/2.0)/focal_length)*180.0/PI; 
-        depth = shootRayOptimized(player.x, player.y, angle);
+        depth = shootRayOptimized(player.x, player.y, angle, hit_horizontal);
         //std::cout << depth << "\n"; 
         x_end = x_start + (depth*cos((angle)*PI/180))*PIXELS_PER_CELL;
         y_end = y_start + (depth*sin((angle)*PI/180))*PIXELS_PER_CELL;
@@ -235,19 +243,39 @@ void renderTopDownMap(SDL_Window* window, SDL_Renderer* renderer, Player& player
 }
 
 void renderRayCasterWindow(SDL_Window* window, SDL_Renderer* renderer, Player& player) {
-    const double BLOCK_HEIGHT = 1.0;
+    const double BLOCK_HEIGHT = 1.0; // TODO: IS THIS CORRECT?
     // Paint background
-    SDL_SetRenderDrawColor(renderer, 0, 0, 0, SDL_ALPHA_OPAQUE);
-    SDL_RenderFillRect(renderer, NULL);
-    
+    SDL_Rect floorRect, ceilingRect;
+    ceilingRect.x = 0.0;
+    ceilingRect.y = 0.0;
+    ceilingRect.w = WIDTH;
+    ceilingRect.h = HEIGHT/2.0;
+    SDL_SetRenderDrawColor(renderer, 50, 50, 50, SDL_ALPHA_OPAQUE);
+    SDL_RenderFillRect(renderer, &ceilingRect);
+    floorRect.y = HEIGHT/2.0;
+    floorRect.w = WIDTH;
+    floorRect.h = HEIGHT/2.0;
+    floorRect.x = 0.0;
+    SDL_SetRenderDrawColor(renderer, 200, 200, 200, SDL_ALPHA_OPAQUE);
+    SDL_RenderFillRect(renderer, &floorRect);
+ 
     // Visualize rays
+    SDL_Rect srcRect, dstRect;
     double focal_length = WIDTH/(2.0*tan(player.fov/2.0*PI/180.0));
     double depth = 0.0, angle = 0.0, height = 0.0, local_angle = 0.0, color = 200.0; 
-    double x_start, x_end, y_start, y_end;
+    double x_start, x_end, y_start, y_end, fraction, x_hit, y_hit;
+    bool hit_horizontal = false;
     for (int pixel_col = 0; pixel_col < WIDTH; pixel_col++) {
         local_angle = atan((pixel_col - WIDTH/2.0)/focal_length)*180.0/PI;
         angle = player.angle + local_angle; 
-        depth = shootRayOptimized(player.x, player.y, angle);
+        depth = shootRayOptimized(player.x, player.y, angle, hit_horizontal);
+        if (hit_horizontal == true) {
+            x_hit = player.x + depth*cos(angle*PI/180.0);
+            fraction = x_hit - floor(x_hit);
+        } else {
+            y_hit = player.y + depth*sin(angle*PI/180.0);
+            fraction = y_hit - floor(y_hit);
+        }
         height = focal_length/cos(local_angle*PI/180.0)*BLOCK_HEIGHT/depth;
         
         x_start = pixel_col;
@@ -256,9 +284,18 @@ void renderRayCasterWindow(SDL_Window* window, SDL_Renderer* renderer, Player& p
         y_end = HEIGHT/2.0 + height/2.0;
 
         color = depth / 15.0*255.0 + 50.0;
+        dstRect.x = x_start;
+        dstRect.y = y_start;
+        dstRect.w = 1;
+        dstRect.h = y_end - y_start + 1;
+        srcRect.x = fraction*900;
+        srcRect.y = 0.0;
+        srcRect.w = 1.0;
+        srcRect.h = 900; 
         SDL_SetRenderDrawColor(renderer, color, color, color, SDL_ALPHA_OPAQUE);
-        SDL_RenderDrawLine(renderer, x_start, y_start, x_end, y_end);
+        SDL_RenderCopyEx(renderer, wall_texture, &srcRect, &dstRect, 0.0, NULL, SDL_FLIP_NONE);
     }
+
     SDL_RenderPresent(renderer);
 }
 
@@ -266,7 +303,6 @@ int main(int argc, char * argv[]) {
     const int TOP_DOWN_WINDOW_WIDTH = PIXELS_PER_CELL*MAP_WIDTH;
     const int TOP_DOWN_WINDOW_HEIGHT = PIXELS_PER_CELL*MAP_HEIGHT;
 
-    //initMap(); 
     printMap(); 
 
     // Create windows
@@ -279,6 +315,14 @@ int main(int argc, char * argv[]) {
     SDL_CreateWindowAndRenderer(WIDTH, HEIGHT, 0, &window_3dview, &renderer_3dview);
 
     Player player;
+
+    // Load textures
+    wall_surface = SDL_LoadBMP("/home/carl/Code/SDL/test/images/wall.bmp");
+    if (wall_surface == NULL) {
+        std::cout << "MASSIVE FAILURE\n";
+        
+    }
+    wall_texture = SDL_CreateTextureFromSurface(renderer_3dview, wall_surface);
 
     // Main loop 
     SDL_Event event; 
