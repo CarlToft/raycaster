@@ -173,20 +173,20 @@ void renderTopDownMap(SDL_Window* window, SDL_Renderer* renderer, Player& player
 
     // Draw horizontal line
     for (int row = 0; row <= MAP_HEIGHT; row++) {
-        rect.x = 0;
-        rect.y = row*PIXELS_PER_CELL;
+        rect.w = MAP_WIDTH*PIXELS_PER_CELL;
         rect.h = 2;
-        rect.w = MAP_WIDTH*PIXELS_PER_CELL; 
+        rect.x = 0;
+        rect.y = row*PIXELS_PER_CELL - rect.h/2.0; 
 
         SDL_SetRenderDrawColor(renderer, 200, 200, 200, SDL_ALPHA_OPAQUE);
         SDL_RenderFillRect(renderer, &rect); 
     }
     // Draw vertical lines 
     for (int col = 0; col <= MAP_WIDTH; col++) {
-        rect.x = col*PIXELS_PER_CELL;
-        rect.y = 0;
         rect.h = MAP_HEIGHT*PIXELS_PER_CELL;
         rect.w = 2; 
+        rect.x = col*PIXELS_PER_CELL - rect.w/2.0;
+        rect.y = 0;
 
         SDL_SetRenderDrawColor(renderer, 200, 200, 200, SDL_ALPHA_OPAQUE);
         SDL_RenderFillRect(renderer, &rect); 
