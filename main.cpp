@@ -317,7 +317,7 @@ int main(int argc, char * argv[]) {
     Player player;
 
     // Load textures
-    wall_surface = SDL_LoadBMP("/home/carl/Code/SDL/test/images/wall.bmp");
+    wall_surface = SDL_LoadBMP("images/wall.bmp");
     if (wall_surface == NULL) {
         std::cout << "MASSIVE FAILURE\n";
         
