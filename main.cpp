@@ -2,6 +2,7 @@
 #include <SDL2/SDL_image.h>
 #include <cmath>
 #include <iostream>
+#include <chrono>
 
 const int MAP_WIDTH = 10;
 const int MAP_HEIGHT = 10;
@@ -275,7 +276,7 @@ int main(int argc, char * argv[]) {
     SDL_Window* window_topdown = NULL;
     SDL_Renderer* renderer_topdown = NULL; 
     SDL_Window* window_3dview = NULL;
-    SDL_Renderer* renderer_3dview = NULL; 
+    SDL_Renderer* renderer_3dview = NULL;
 
     SDL_CreateWindowAndRenderer(TOP_DOWN_WINDOW_WIDTH, TOP_DOWN_WINDOW_HEIGHT, 0, &window_topdown, &renderer_topdown); 
     SDL_CreateWindowAndRenderer(WIDTH, HEIGHT, 0, &window_3dview, &renderer_3dview);
@@ -291,22 +292,23 @@ int main(int argc, char * argv[]) {
     wall_texture = SDL_CreateTextureFromSurface(renderer_3dview, wall_surface);
 
     // Main loop 
+    auto previous_time = std::chrono::system_clock::now();
     SDL_Event event; 
     bool quit = false;
     while (quit == false) {
         while (SDL_PollEvent(&event) != 0) {
             if (event.type == SDL_KEYDOWN) {
                 if (event.key.keysym.sym == SDLK_UP) {
-                    player.speed = 0.002; 
+                    player.speed = 2.0; 
                 }
                 else if (event.key.keysym.sym == SDLK_DOWN) {
-                    player.speed = -0.002; 
+                    player.speed = -2.0; 
                 }
                 else if (event.key.keysym.sym == SDLK_LEFT) {
-                    player.angular_velocity = -0.2; 
+                    player.angular_velocity = -120; 
                 }
                 else if (event.key.keysym.sym == SDLK_RIGHT) {
-                    player.angular_velocity = 0.2;
+                    player.angular_velocity = 120;
                 }
                 else if (event.key.keysym.sym == SDLK_ESCAPE) {
                     // QUIT GAME
@@ -326,13 +328,18 @@ int main(int argc, char * argv[]) {
         }
 
         // Move the player
-        double new_x = player.x + player.speed*cos(player.angle*PI/180);
-        double new_y = player.y + player.speed*sin(player.angle*PI/180);
+        auto current_time = std::chrono::system_clock::now();
+        double delta_t = std::chrono::duration_cast<std::chrono::microseconds>(current_time - previous_time).count();
+        delta_t = delta_t / 1e6;
+        previous_time = current_time;
+
+        double new_x = player.x + player.speed*delta_t*cos(player.angle*PI/180);
+        double new_y = player.y + player.speed*delta_t*sin(player.angle*PI/180);
         if (MAP[int(floor(new_y))][int(floor(new_x))] == false) {
             player.x = new_x;
             player.y = new_y;
         }
-        player.angle = player.angle + player.angular_velocity;
+        player.angle = player.angle + player.angular_velocity*delta_t;
 
         renderTopDownMap(window_topdown, renderer_topdown, player);
         renderRayCasterWindow(window_3dview, renderer_3dview, player);
