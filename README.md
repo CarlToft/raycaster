@@ -16,4 +16,4 @@ The program can be compiled using g++ like this:
 g++ main.cpp -l SDL2 -l SDL2_image
 ```
 
-![]("https://github.com/CarlToft/raycaster/blob/main/images/vis.gif")
+!("./images/vis.gif")
