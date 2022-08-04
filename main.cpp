@@ -29,6 +29,7 @@ bool MAP[MAP_HEIGHT][MAP_WIDTH] = {
 class Player {
     public:
         Player(); 
+        void move(double delta_t);
 
         double x;
         double y;
@@ -47,6 +48,19 @@ Player::Player() {
     speed = 0.0; 
     angular_velocity = 0.0; 
     angle_visualizer_length = 5.0;
+}
+
+// Move the player. delta_t is the time in seconds since the last update
+void Player::move(double delta_t) {
+        double new_x = x + speed*delta_t*cos(angle*PI/180);
+        double new_y = y + speed*delta_t*sin(angle*PI/180);
+
+        // Only move the player if the new spot is unoccupied
+        if (MAP[int(floor(new_y))][int(floor(new_x))] == false) {
+            x = new_x;
+            y = new_y;
+        }
+        angle = angle + angular_velocity*delta_t;
 }
 
 void printMap() {
@@ -129,7 +143,8 @@ void renderTopDownMap(SDL_Window* window, SDL_Renderer* renderer, Player& player
     // Draw background
     SDL_SetRenderDrawColor(renderer, 0, 0, 0, SDL_ALPHA_OPAQUE);
     SDL_RenderFillRect(renderer, NULL);
-    // Draw the cells 
+
+    // Draw the occupied cells 
     for (int row = 0; row < MAP_HEIGHT; row++) {
         for (int col = 0; col < MAP_WIDTH; col++) {
             if (MAP[row][col] == true) {
@@ -145,7 +160,7 @@ void renderTopDownMap(SDL_Window* window, SDL_Renderer* renderer, Player& player
         }
     }
 
-    // Draw horizontal line
+    // Draw horizontal lines
     for (int row = 0; row <= MAP_HEIGHT; row++) {
         rect.w = MAP_WIDTH*PIXELS_PER_CELL;
         rect.h = 2;
@@ -181,10 +196,9 @@ void renderTopDownMap(SDL_Window* window, SDL_Renderer* renderer, Player& player
     double y_start = player.y*PIXELS_PER_CELL; 
     double x_end = x_start + (player.angle_visualizer_length*cos(player.angle*PI/180))*PIXELS_PER_CELL;
     double y_end = y_start + (player.angle_visualizer_length*sin(player.angle*PI/180))*PIXELS_PER_CELL;
-    //SDL_SetRenderDrawColor(renderer, 255, 0, 0, SDL_ALPHA_OPAQUE);
     SDL_RenderDrawLine(renderer, x_start, y_start, x_end, y_end); 
 
-    // Draw field of view
+    // Draw the player field of view
     x_end = x_start + (player.angle_visualizer_length*cos((player.angle-player.fov/2.0)*PI/180))*PIXELS_PER_CELL;
     y_end = y_start + (player.angle_visualizer_length*sin((player.angle-player.fov/2.0)*PI/180))*PIXELS_PER_CELL;
     SDL_RenderDrawLine(renderer, x_start, y_start, x_end, y_end); 
@@ -192,7 +206,7 @@ void renderTopDownMap(SDL_Window* window, SDL_Renderer* renderer, Player& player
     y_end = y_start + (player.angle_visualizer_length*sin((player.angle+player.fov/2.0)*PI/180))*PIXELS_PER_CELL;
     SDL_RenderDrawLine(renderer, x_start, y_start, x_end, y_end);
 
-    // Visualize rays
+    // Visualize some of the rays being cast
     SDL_SetRenderDrawColor(renderer, 0, 255, 0, SDL_ALPHA_OPAQUE);
     double focal_length = WIDTH/(2.0*tan(player.fov/2.0*PI/180.0));
     double depth = 0.0, angle = 0.0; 
@@ -200,18 +214,19 @@ void renderTopDownMap(SDL_Window* window, SDL_Renderer* renderer, Player& player
     for (int pixel_col = 0; pixel_col < WIDTH; pixel_col += 8) {
         angle = player.angle + atan((pixel_col - WIDTH/2.0)/focal_length)*180.0/PI; 
         depth = shootRay(player.x, player.y, angle, hit_horizontal);
-        //std::cout << depth << "\n"; 
         x_end = x_start + (depth*cos((angle)*PI/180))*PIXELS_PER_CELL;
         y_end = y_start + (depth*sin((angle)*PI/180))*PIXELS_PER_CELL;
         SDL_RenderDrawLine(renderer, x_start, y_start, x_end, y_end);
     }
 
+    // Show the freshly drawn frame!
     SDL_RenderPresent(renderer); 
 }
 
 void renderRayCasterWindow(SDL_Window* window, SDL_Renderer* renderer, Player& player) {
     const double BLOCK_HEIGHT = 1.0;
-    // Paint background
+
+    // Draw roof and floor
     SDL_Rect floorRect, ceilingRect;
     ceilingRect.x = 0.0;
     ceilingRect.y = 0.0;
@@ -226,16 +241,20 @@ void renderRayCasterWindow(SDL_Window* window, SDL_Renderer* renderer, Player& p
     SDL_SetRenderDrawColor(renderer, 200, 200, 200, SDL_ALPHA_OPAQUE);
     SDL_RenderFillRect(renderer, &floorRect);
  
-    // Visualize rays
+    // Perform raycasting
     SDL_Rect srcRect, dstRect;
     double focal_length = WIDTH/(2.0*tan(player.fov/2.0*PI/180.0));
     double depth = 0.0, angle = 0.0, height = 0.0, local_angle = 0.0, color = 200.0; 
     double x_start, x_end, y_start, y_end, fraction, x_hit, y_hit;
     bool hit_horizontal = false;
     for (int pixel_col = 0; pixel_col < WIDTH; pixel_col++) {
-        local_angle = atan((pixel_col - WIDTH/2.0)/focal_length)*180.0/PI;
-        angle = player.angle + local_angle; 
-        depth = shootRay(player.x, player.y, angle, hit_horizontal);
+        local_angle = atan((pixel_col - WIDTH/2.0)/focal_length)*180.0/PI;  // local angle of ray in FOV,
+                                                                            //zero being straight ahead
+
+        angle = player.angle + local_angle; // angle of ray in global coordinates
+        depth = shootRay(player.x, player.y, angle, hit_horizontal); // distance to hit
+
+        // We must distinguish between hits along horizontal or vertical walls to properly compute texture coordinates
         if (hit_horizontal == true) {
             x_hit = player.x + depth*cos(angle*PI/180.0);
             fraction = x_hit - floor(x_hit);
@@ -243,14 +262,14 @@ void renderRayCasterWindow(SDL_Window* window, SDL_Renderer* renderer, Player& p
             y_hit = player.y + depth*sin(angle*PI/180.0);
             fraction = y_hit - floor(y_hit);
         }
-        height = focal_length/cos(local_angle*PI/180.0)*BLOCK_HEIGHT/depth;
+        height = focal_length/cos(local_angle*PI/180.0)*BLOCK_HEIGHT/depth; // height of wall in pixels along this column 
         
         x_start = pixel_col;
         x_end = pixel_col;
         y_start = HEIGHT/2.0 - height/2.0;
         y_end = HEIGHT/2.0 + height/2.0;
 
-        color = depth / 15.0*255.0 + 50.0;
+        // Sample the texture and draw it in the current frame
         dstRect.x = x_start;
         dstRect.y = y_start;
         dstRect.w = 1;
@@ -259,7 +278,6 @@ void renderRayCasterWindow(SDL_Window* window, SDL_Renderer* renderer, Player& p
         srcRect.y = 0.0;
         srcRect.w = 1.0;
         srcRect.h = 900; 
-        SDL_SetRenderDrawColor(renderer, color, color, color, SDL_ALPHA_OPAQUE);
         SDL_RenderCopy(renderer, wall_texture, &srcRect, &dstRect);
     }
 
@@ -296,6 +314,7 @@ int main(int argc, char * argv[]) {
     SDL_Event event; 
     bool quit = false;
     while (quit == false) {
+        // Check for player inputs
         while (SDL_PollEvent(&event) != 0) {
             if (event.type == SDL_KEYDOWN) {
                 if (event.key.keysym.sym == SDLK_UP) {
@@ -333,14 +352,9 @@ int main(int argc, char * argv[]) {
         delta_t = delta_t / 1e6;
         previous_time = current_time;
 
-        double new_x = player.x + player.speed*delta_t*cos(player.angle*PI/180);
-        double new_y = player.y + player.speed*delta_t*sin(player.angle*PI/180);
-        if (MAP[int(floor(new_y))][int(floor(new_x))] == false) {
-            player.x = new_x;
-            player.y = new_y;
-        }
-        player.angle = player.angle + player.angular_velocity*delta_t;
+        player.move(delta_t);
 
+        // Render the current frame
         renderTopDownMap(window_topdown, renderer_topdown, player);
         renderRayCasterWindow(window_3dview, renderer_3dview, player);
     }
