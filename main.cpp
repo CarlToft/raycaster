@@ -277,7 +277,9 @@ void renderRayCasterWindow(SDL_Window* window, SDL_Renderer* renderer, Player& p
         srcRect.x = fraction*900;
         srcRect.y = 0.0;
         srcRect.w = 1.0;
-        srcRect.h = 900; 
+        srcRect.h = 900;
+        Uint8 color_scaling = 255 - int((depth/20.0)*255);
+        SDL_SetTextureColorMod(wall_texture, color_scaling, color_scaling, color_scaling);
         SDL_RenderCopy(renderer, wall_texture, &srcRect, &dstRect);
     }
 
