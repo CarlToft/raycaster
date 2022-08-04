@@ -234,7 +234,7 @@ void renderRayCasterWindow(SDL_Window* window, SDL_Renderer* renderer, Player& p
     for (int pixel_col = 0; pixel_col < WIDTH; pixel_col++) {
         local_angle = atan((pixel_col - WIDTH/2.0)/focal_length)*180.0/PI;
         angle = player.angle + local_angle; 
-        depth = shootRayOptimized(player.x, player.y, angle, hit_horizontal);
+        depth = shootRay(player.x, player.y, angle, hit_horizontal);
         if (hit_horizontal == true) {
             x_hit = player.x + depth*cos(angle*PI/180.0);
             fraction = x_hit - floor(x_hit);
