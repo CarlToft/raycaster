@@ -48,23 +48,6 @@ Player::Player() {
     angle_visualizer_length = 5.0;
 }
 
-void initMap() {
-    for (int row = 0; row < MAP_HEIGHT; row++) {
-        for (int col = 0; col < MAP_WIDTH; col++) {
-            MAP[row][col] = false;
-        }
-    }
-
-    for (int row = 0; row < MAP_HEIGHT; row++) {
-        MAP[row][0] = true;
-        MAP[row][MAP_WIDTH-1] = true;
-    }
-    for (int col = 0; col < MAP_WIDTH; col++) {
-        MAP[0][col] = true;
-        MAP[MAP_HEIGHT-1][col] = true;
-    }
-}
-
 void printMap() {
     for (int row = 0; row < MAP_HEIGHT; row++) {
         for (int col = 0; col < MAP_WIDTH; col++) {
@@ -76,7 +59,6 @@ void printMap() {
 
 double intersectWithHorizontalLine(double x, double y, double angle, double y_line) {
     double sin_theta = sin(angle*PI/180.0);
-    //std::cout << "sin: " << sin_theta << " " << abs(sin_theta) << "\n";
     if (abs(sin_theta) < 1e-8) {
         return 1e8;
     }
@@ -86,7 +68,6 @@ double intersectWithHorizontalLine(double x, double y, double angle, double y_li
 
 double intersectWithVerticalLine(double x, double y, double angle, double x_line) {
     double cos_theta = cos(angle*PI/180.0);
-    //std::cout << "cos: " << cos_theta << " " << abs(cos_theta) << "\n";
     if (abs(cos_theta) < 1e-8) {
         return 1e8;
     }
@@ -94,7 +75,7 @@ double intersectWithVerticalLine(double x, double y, double angle, double x_line
     return ((x_line - x)/cos_theta);
 }
 
-double shootRayOptimized(double x_start, double y_start, double angle, bool& hit_horizontal) {
+double shootRay(double x_start, double y_start, double angle, bool& hit_horizontal) {
     int curr_x = int(floor(x_start));
     int curr_y = int(floor(y_start));
 
@@ -138,21 +119,6 @@ double shootRayOptimized(double x_start, double y_start, double angle, bool& hit
             vertical_line_distance = intersectWithVerticalLine(x_start, y_start, angle, x_line);
         }
     } 
-}
-
-double shootRay(double x_start, double y_start, double angle) {
-    const double STEP_SIZE = 0.05;
-    double curr_x = x_start; 
-    double curr_y = y_start;
-    double depth = 0; 
-    while (true) {
-        curr_x = curr_x + STEP_SIZE*cos(angle*PI/180.0); 
-        curr_y = curr_y + STEP_SIZE*sin(angle*PI/180.0);
-        depth = depth + STEP_SIZE;  
-        if (MAP[int(floor(curr_y))][int(floor(curr_x))] == true) {
-            return depth; 
-        }
-    }
 }
 
 void renderTopDownMap(SDL_Window* window, SDL_Renderer* renderer, Player& player) {
@@ -232,7 +198,7 @@ void renderTopDownMap(SDL_Window* window, SDL_Renderer* renderer, Player& player
     bool hit_horizontal = false;
     for (int pixel_col = 0; pixel_col < WIDTH; pixel_col += 8) {
         angle = player.angle + atan((pixel_col - WIDTH/2.0)/focal_length)*180.0/PI; 
-        depth = shootRayOptimized(player.x, player.y, angle, hit_horizontal);
+        depth = shootRay(player.x, player.y, angle, hit_horizontal);
         //std::cout << depth << "\n"; 
         x_end = x_start + (depth*cos((angle)*PI/180))*PIXELS_PER_CELL;
         y_end = y_start + (depth*sin((angle)*PI/180))*PIXELS_PER_CELL;
@@ -243,7 +209,7 @@ void renderTopDownMap(SDL_Window* window, SDL_Renderer* renderer, Player& player
 }
 
 void renderRayCasterWindow(SDL_Window* window, SDL_Renderer* renderer, Player& player) {
-    const double BLOCK_HEIGHT = 1.0; // TODO: IS THIS CORRECT?
+    const double BLOCK_HEIGHT = 1.0;
     // Paint background
     SDL_Rect floorRect, ceilingRect;
     ceilingRect.x = 0.0;
@@ -319,7 +285,7 @@ int main(int argc, char * argv[]) {
     // Load textures
     wall_surface = SDL_LoadBMP("images/wall.bmp");
     if (wall_surface == NULL) {
-        std::cout << "MASSIVE FAILURE\n";
+        std::cout << "FAILED TO LOAD TEXTURE\n";
         
     }
     wall_texture = SDL_CreateTextureFromSurface(renderer_3dview, wall_surface);
