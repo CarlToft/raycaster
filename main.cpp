@@ -288,6 +288,8 @@ int main(int argc, char * argv[]) {
     const int TOP_DOWN_WINDOW_WIDTH = PIXELS_PER_CELL*MAP_WIDTH;
     const int TOP_DOWN_WINDOW_HEIGHT = PIXELS_PER_CELL*MAP_HEIGHT;
 
+    SDL_Init(SDL_INIT_EVERYTHING);
+
     printMap(); 
 
     // Create windows
@@ -316,6 +318,12 @@ int main(int argc, char * argv[]) {
     while (quit == false) {
         // Check for player inputs
         while (SDL_PollEvent(&event) != 0) {
+            if (event.type == SDL_WINDOWEVENT) {
+                if (event.window.event == SDL_WINDOWEVENT_CLOSE) {
+                    quit = true;
+                }
+            }
+
             if (event.type == SDL_KEYDOWN) {
                 if (event.key.keysym.sym == SDLK_UP) {
                     player.speed = 2.0; 
