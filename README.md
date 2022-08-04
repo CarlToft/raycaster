@@ -16,4 +16,6 @@ The program can be compiled using g++ like this:
 g++ main.cpp -l SDL2 -l SDL2_image
 ```
 
+## Demo
+
 <img src="https://github.com/CarlToft/raycaster/blob/main/images/vis.gif"/>
