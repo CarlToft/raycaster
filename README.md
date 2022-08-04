@@ -16,4 +16,4 @@ The program can be compiled using g++ like this:
 g++ main.cpp -l SDL2 -l SDL2_image
 ```
 
-![]("./images/vis.gif")
+![]("./images/wall.bmp")
