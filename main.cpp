@@ -259,7 +259,7 @@ void renderRayCasterWindow(SDL_Window* window, SDL_Renderer* renderer, Player& p
         srcRect.w = 1.0;
         srcRect.h = 900; 
         SDL_SetRenderDrawColor(renderer, color, color, color, SDL_ALPHA_OPAQUE);
-        SDL_RenderCopyEx(renderer, wall_texture, &srcRect, &dstRect, 0.0, NULL, SDL_FLIP_NONE);
+        SDL_RenderCopy(renderer, wall_texture, &srcRect, &dstRect);
     }
 
     SDL_RenderPresent(renderer);
