@@ -11,7 +11,7 @@ const int HEIGHT = 480;
 const double PIXELS_PER_CELL = 70; 
 const double PI = 3.1415926535897932384626; 
 SDL_Surface* wall_surface; 
-SDL_Texture* wall_texture;
+SDL_Surface* floor_surface;
 
 bool MAP[MAP_HEIGHT][MAP_WIDTH] = {
     {true, true, true, true, true, true, true, true, true, true},
@@ -52,15 +52,28 @@ Player::Player() {
 
 // Move the player. delta_t is the time in seconds since the last update
 void Player::move(double delta_t) {
-        double new_x = x + speed*delta_t*cos(angle*PI/180);
-        double new_y = y + speed*delta_t*sin(angle*PI/180);
+    double new_x = x + speed*delta_t*cos(angle*PI/180);
+    double new_y = y + speed*delta_t*sin(angle*PI/180);
 
-        // Only move the player if the new spot is unoccupied
-        if (MAP[int(floor(new_y))][int(floor(new_x))] == false) {
-            x = new_x;
-            y = new_y;
-        }
-        angle = angle + angular_velocity*delta_t;
+    // Only move the player if the new spot is unoccupied
+    if (MAP[int(floor(new_y))][int(floor(new_x))] == false) {
+        x = new_x;
+        y = new_y;
+    }
+    angle = angle + angular_velocity*delta_t;
+}
+
+// TODO: These two methods are super sketchy, and might crash for images other than the
+//       ones we are using...
+void get_pixel(SDL_Surface* surface, int x, int y, Uint8 &r, Uint8 &g, Uint8 &b) {
+    r = ((Uint8*)(surface->pixels))[3*x + y*surface->pitch];
+    g = ((Uint8*)(surface->pixels))[3*x + y*surface->pitch + 1];
+    b = ((Uint8*)(surface->pixels))[3*x + y*surface->pitch + 2];
+}
+
+void set_pixel(SDL_Surface* surface, int x, int y, Uint8 r, Uint8 g, Uint8 b) {
+    Uint32 color = SDL_MapRGB(surface->format, r, g, b);
+    ((Uint32*)(surface->pixels))[x + y*surface->w] = color;
 }
 
 void printMap() {
@@ -223,7 +236,7 @@ void renderTopDownMap(SDL_Window* window, SDL_Renderer* renderer, Player& player
     SDL_RenderPresent(renderer); 
 }
 
-void renderRayCasterWindow(SDL_Window* window, SDL_Renderer* renderer, Player& player) {
+void renderRayCasterWindow(SDL_Window* window, SDL_Surface* surface, Player& player) {
     const double BLOCK_HEIGHT = 1.0;
 
     // Draw roof and floor
@@ -232,14 +245,7 @@ void renderRayCasterWindow(SDL_Window* window, SDL_Renderer* renderer, Player& p
     ceilingRect.y = 0.0;
     ceilingRect.w = WIDTH;
     ceilingRect.h = HEIGHT/2.0;
-    SDL_SetRenderDrawColor(renderer, 50, 50, 50, SDL_ALPHA_OPAQUE);
-    SDL_RenderFillRect(renderer, &ceilingRect);
-    floorRect.y = HEIGHT/2.0;
-    floorRect.w = WIDTH;
-    floorRect.h = HEIGHT/2.0;
-    floorRect.x = 0.0;
-    SDL_SetRenderDrawColor(renderer, 200, 200, 200, SDL_ALPHA_OPAQUE);
-    SDL_RenderFillRect(renderer, &floorRect);
+    SDL_FillRect(surface, &ceilingRect, SDL_MapRGB(surface->format, 50, 50, 50));
  
     // Perform raycasting
     SDL_Rect srcRect, dstRect;
@@ -247,6 +253,8 @@ void renderRayCasterWindow(SDL_Window* window, SDL_Renderer* renderer, Player& p
     double depth = 0.0, angle = 0.0, height = 0.0, local_angle = 0.0, color = 200.0; 
     double x_start, x_end, y_start, y_end, fraction, x_hit, y_hit;
     bool hit_horizontal = false;
+    int y_dst, x_src, y_src;
+    Uint8 r, g, b;
     for (int pixel_col = 0; pixel_col < WIDTH; pixel_col++) {
         local_angle = atan((pixel_col - WIDTH/2.0)/focal_length)*180.0/PI;  // local angle of ray in FOV,
                                                                             //zero being straight ahead
@@ -262,28 +270,42 @@ void renderRayCasterWindow(SDL_Window* window, SDL_Renderer* renderer, Player& p
             y_hit = player.y + depth*sin(angle*PI/180.0);
             fraction = y_hit - floor(y_hit);
         }
+        x_src = (int)(900*fraction);
         height = focal_length/cos(local_angle*PI/180.0)*BLOCK_HEIGHT/depth; // height of wall in pixels along this column 
         
-        x_start = pixel_col;
-        x_end = pixel_col;
-        y_start = HEIGHT/2.0 - height/2.0;
-        y_end = HEIGHT/2.0 + height/2.0;
+        for (int y_dst = HEIGHT/2.0 - height/2.0; y_dst < HEIGHT/2.0 + height/2.0; y_dst++) {
+            y_src = int((y_dst-HEIGHT/2.0+height/2.0)/height*900);
+            if (y_dst < 0) {
+                y_dst = -1;
+                continue;
+            } else if (y_dst >= HEIGHT) {
+                break;
+            }
+            get_pixel(wall_surface, x_src, y_src, b, g, r);
+            Uint8 color_scaling = 255 - int((depth/20.0)*255);
+            set_pixel(surface, pixel_col, y_dst, r, g, b);
+        }
 
-        // Sample the texture and draw it in the current frame
-        dstRect.x = x_start;
-        dstRect.y = y_start;
-        dstRect.w = 1;
-        dstRect.h = y_end - y_start + 1;
-        srcRect.x = fraction*900;
-        srcRect.y = 0.0;
-        srcRect.w = 1.0;
-        srcRect.h = 900;
-        Uint8 color_scaling = 255 - int((depth/20.0)*255);
-        SDL_SetTextureColorMod(wall_texture, color_scaling, color_scaling, color_scaling);
-        SDL_RenderCopy(renderer, wall_texture, &srcRect, &dstRect);
+        // Draw the floor
+        double distance, xx, yy;
+        for (int y_dst = HEIGHT/2.0 + height/2.0; y_dst < HEIGHT; y_dst++) {
+            if (y_dst < 0) {
+                continue;
+            }
+            else if (y_dst >= HEIGHT) {
+                break;
+            }
+            distance = BLOCK_HEIGHT/2.0*focal_length/((y_dst - HEIGHT/2.0)*cos(local_angle*PI/180.0));
+            xx = player.x + distance*cos(angle*PI/180.0);
+            yy = player.y + distance*sin(angle*PI/180.0);
+            x_src = (int)((xx - floor(xx))*1200);
+            y_src = (int)((yy - floor(yy))*1200);
+            get_pixel(floor_surface, x_src, y_src, b, g, r);
+            set_pixel(surface, pixel_col, y_dst, r, g, b);
+        }
     }
 
-    SDL_RenderPresent(renderer);
+    SDL_UpdateWindowSurface(window);
 }
 
 int main(int argc, char * argv[]) {
@@ -298,20 +320,25 @@ int main(int argc, char * argv[]) {
     SDL_Window* window_topdown = NULL;
     SDL_Renderer* renderer_topdown = NULL; 
     SDL_Window* window_3dview = NULL;
-    SDL_Renderer* renderer_3dview = NULL;
+    SDL_Surface* surface_3dview = NULL;
 
     SDL_CreateWindowAndRenderer(TOP_DOWN_WINDOW_WIDTH, TOP_DOWN_WINDOW_HEIGHT, 0, &window_topdown, &renderer_topdown); 
-    SDL_CreateWindowAndRenderer(WIDTH, HEIGHT, 0, &window_3dview, &renderer_3dview);
+    window_3dview = SDL_CreateWindow("Raycaster", 100, 100, WIDTH, HEIGHT, SDL_WINDOW_SHOWN);
+    surface_3dview = SDL_GetWindowSurface(window_3dview);
 
     Player player;
 
     // Load textures
     wall_surface = SDL_LoadBMP("images/wall.bmp");
+    floor_surface = SDL_LoadBMP("images/floor.bmp");
     if (wall_surface == NULL) {
-        std::cout << "FAILED TO LOAD TEXTURE\n";
+        std::cout << "FAILED TO LOAD WALL TEXTURE\n";
         
     }
-    wall_texture = SDL_CreateTextureFromSurface(renderer_3dview, wall_surface);
+    if (floor_surface == NULL) {
+        std::cout << "FAILED TO LOAD FLOOR TEXTURE\n";
+        
+    }
 
     // Main loop 
     auto previous_time = std::chrono::system_clock::now();
@@ -352,8 +379,6 @@ int main(int argc, char * argv[]) {
                     player.angular_velocity = 0.0; 
                 }
             }
-
-
         }
 
         // Move the player
@@ -366,7 +391,7 @@ int main(int argc, char * argv[]) {
 
         // Render the current frame
         renderTopDownMap(window_topdown, renderer_topdown, player);
-        renderRayCasterWindow(window_3dview, renderer_3dview, player);
+        renderRayCasterWindow(window_3dview, surface_3dview, player);
     }
 
     // Quit
