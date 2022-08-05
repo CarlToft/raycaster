@@ -12,6 +12,7 @@ const double PIXELS_PER_CELL = 70;
 const double PI = 3.1415926535897932384626; 
 SDL_Surface* wall_surface; 
 SDL_Surface* floor_surface;
+SDL_Surface* ceiling_surface;
 
 bool MAP[MAP_HEIGHT][MAP_WIDTH] = {
     {true, true, true, true, true, true, true, true, true, true},
@@ -238,20 +239,12 @@ void renderTopDownMap(SDL_Window* window, SDL_Renderer* renderer, Player& player
 
 void renderRayCasterWindow(SDL_Window* window, SDL_Surface* surface, Player& player) {
     const double BLOCK_HEIGHT = 1.0;
-
-    // Draw roof and floor
-    SDL_Rect floorRect, ceilingRect;
-    ceilingRect.x = 0.0;
-    ceilingRect.y = 0.0;
-    ceilingRect.w = WIDTH;
-    ceilingRect.h = HEIGHT/2.0;
-    SDL_FillRect(surface, &ceilingRect, SDL_MapRGB(surface->format, 50, 50, 50));
  
     // Perform raycasting
     SDL_Rect srcRect, dstRect;
     double focal_length = WIDTH/(2.0*tan(player.fov/2.0*PI/180.0));
     double depth = 0.0, angle = 0.0, height = 0.0, local_angle = 0.0, color = 200.0; 
-    double x_start, x_end, y_start, y_end, fraction, x_hit, y_hit;
+    double x_start, x_end, y_start, y_end, fraction, x_hit, y_hit, x_fraction, y_fraction;
     bool hit_horizontal = false;
     int y_dst, x_src, y_src;
     Uint8 r, g, b;
@@ -286,7 +279,7 @@ void renderRayCasterWindow(SDL_Window* window, SDL_Surface* surface, Player& pla
             set_pixel(surface, pixel_col, y_dst, r, g, b);
         }
 
-        // Draw the floor
+        // Draw the floor and ceiling
         double distance, xx, yy;
         for (int y_dst = HEIGHT/2.0 + height/2.0; y_dst < HEIGHT; y_dst++) {
             if (y_dst < 0) {
@@ -298,10 +291,19 @@ void renderRayCasterWindow(SDL_Window* window, SDL_Surface* surface, Player& pla
             distance = BLOCK_HEIGHT/2.0*focal_length/((y_dst - HEIGHT/2.0)*cos(local_angle*PI/180.0));
             xx = player.x + distance*cos(angle*PI/180.0);
             yy = player.y + distance*sin(angle*PI/180.0);
-            x_src = (int)((xx - floor(xx))*1200);
-            y_src = (int)((yy - floor(yy))*1200);
+            x_fraction = xx - floor(xx);
+            y_fraction = yy - floor(yy);
+
+            // Draw the floor
+            x_src = (int)(x_fraction*1200);
+            y_src = (int)(y_fraction*1200);
             get_pixel(floor_surface, x_src, y_src, b, g, r);
             set_pixel(surface, pixel_col, y_dst, r, g, b);
+            x_src = (int)(x_fraction*1024);
+            y_src = (int)(y_fraction*1024);
+            // Draw the ceiling
+            get_pixel(ceiling_surface, x_src, y_src, b, g, r);
+            set_pixel(surface, pixel_col, HEIGHT - y_dst, r, g, b);
         }
     }
 
@@ -331,13 +333,15 @@ int main(int argc, char * argv[]) {
     // Load textures
     wall_surface = SDL_LoadBMP("images/wall.bmp");
     floor_surface = SDL_LoadBMP("images/floor.bmp");
+    ceiling_surface = SDL_LoadBMP("images/ceiling.bmp");
     if (wall_surface == NULL) {
         std::cout << "FAILED TO LOAD WALL TEXTURE\n";
-        
     }
     if (floor_surface == NULL) {
-        std::cout << "FAILED TO LOAD FLOOR TEXTURE\n";
-        
+        std::cout << "FAILED TO LOAD FLOOR TEXTURE\n";  
+    }
+    if (ceiling_surface == NULL) {
+        std::cout << "FAILED TO LOAD CEILING TEXTURE\n";  
     }
 
     // Main loop 
