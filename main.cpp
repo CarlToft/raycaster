@@ -303,7 +303,7 @@ void renderRayCasterWindow(SDL_Window* window, SDL_Surface* surface, Player& pla
             y_src = (int)(y_fraction*1024);
             // Draw the ceiling
             get_pixel(ceiling_surface, x_src, y_src, b, g, r);
-            set_pixel(surface, pixel_col, HEIGHT - y_dst, r, g, b);
+            set_pixel(surface, pixel_col, HEIGHT - y_dst - 1, r, g, b);
         }
     }
 
