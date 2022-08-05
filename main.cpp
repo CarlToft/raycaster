@@ -263,11 +263,11 @@ void renderRayCasterWindow(SDL_Window* window, SDL_Surface* surface, Player& pla
             y_hit = player.y + depth*sin(angle*PI/180.0);
             fraction = y_hit - floor(y_hit);
         }
-        x_src = (int)(900*fraction);
+        x_src = (int)(wall_surface->w*fraction);
         height = focal_length/cos(local_angle*PI/180.0)*BLOCK_HEIGHT/depth; // height of wall in pixels along this column 
         
         for (int y_dst = HEIGHT/2.0 - height/2.0; y_dst < HEIGHT/2.0 + height/2.0; y_dst++) {
-            y_src = int((y_dst-HEIGHT/2.0+height/2.0)/height*900);
+            y_src = int((y_dst-HEIGHT/2.0+height/2.0)/height*wall_surface->h);
             if (y_dst < 0) {
                 y_dst = -1;
                 continue;
@@ -295,12 +295,12 @@ void renderRayCasterWindow(SDL_Window* window, SDL_Surface* surface, Player& pla
             y_fraction = yy - floor(yy);
 
             // Draw the floor
-            x_src = (int)(x_fraction*1200);
-            y_src = (int)(y_fraction*1200);
+            x_src = (int)(x_fraction*floor_surface->w);
+            y_src = (int)(y_fraction*floor_surface->h);
             get_pixel(floor_surface, x_src, y_src, b, g, r);
             set_pixel(surface, pixel_col, y_dst, r, g, b);
-            x_src = (int)(x_fraction*1024);
-            y_src = (int)(y_fraction*1024);
+            x_src = (int)(x_fraction*ceiling_surface->w);
+            y_src = (int)(y_fraction*ceiling_surface->h);
             // Draw the ceiling
             get_pixel(ceiling_surface, x_src, y_src, b, g, r);
             set_pixel(surface, pixel_col, HEIGHT - y_dst - 1, r, g, b);
