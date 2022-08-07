@@ -1,6 +1,7 @@
 #include <SDL2/SDL.h>
 #include <cmath>
 #include <iostream>
+#include <sstream>
 #include <chrono>
 
 const int MAP_WIDTH = 10;
@@ -8,8 +9,24 @@ const int MAP_HEIGHT = 10;
 const int WIDTH = 640; 
 const int HEIGHT = 480;
 const double PIXELS_PER_CELL = 70; 
-const double PI = 3.1415926535897932384626; 
-SDL_Surface* wall_surface; 
+constexpr double PI = 3.1415926535897932384626;
+
+using radian = double;
+
+// User define literal type which accepts degrees but evaluates to radians
+constexpr radian operator"" _deg_to_rad(long double deg) {
+    return deg * PI / 180;
+}
+
+// User define literal type which takes a degrees but evaluates to radians
+constexpr radian operator"" _deg_to_rad(unsigned long long deg) {
+  return deg * PI / 180;
+}
+
+const radian YAW_RATE = 120_deg_to_rad;
+
+static const double MOVEMENT_SPEED = 2.0;
+SDL_Surface* wall_surface;
 SDL_Surface* floor_surface;
 SDL_Surface* ceiling_surface;
 
@@ -24,7 +41,7 @@ bool MAP[MAP_HEIGHT][MAP_WIDTH] = {
     {true, false, false, false, false, true, true, true, false, true},
     {true, false, false, false, false, false, false, false, false, true},
     {true, true, true, true, true, true, true, true, true, true},
-}; 
+};
 
 class Player {
     public:
@@ -34,17 +51,17 @@ class Player {
         double x;
         double y;
         double speed; 
-        double angular_velocity; 
-        double angle; // in degrees
-        double fov; // in degrees
+        radian angular_velocity;
+        radian angle; // in radians
+        double fov; // in radians
         double angle_visualizer_length;
 };
 
 Player::Player() {
     x = 4.4; 
     y = 5.8; 
-    angle = 0.0; // in degrees  
-    fov = 90.0; // in degrees 
+    angle = 0.0_deg_to_rad;
+    fov = 90.0_deg_to_rad;
     speed = 0.0; 
     angular_velocity = 0.0; 
     angle_visualizer_length = 5.0;
@@ -52,11 +69,16 @@ Player::Player() {
 
 // Move the player. delta_t is the time in seconds since the last update
 void Player::move(double delta_t) {
-    double new_x = x + speed*delta_t*cos(angle*PI/180);
-    double new_y = y + speed*delta_t*sin(angle*PI/180);
+
+    const double MARGIN = speed > 0 ? 0.05 : -0.05;
+
+    double new_x = x + speed*delta_t*cos(angle);
+    double new_y = y + speed*delta_t*sin(angle);
+
+
 
     // Only move the player if the new spot is unoccupied
-    if (MAP[int(floor(new_y))][int(floor(new_x))] == false) {
+    if (MAP[int(floor(new_y + MARGIN*sin(angle)))][int(floor(new_x + MARGIN*cos(angle)))] == false) {
         x = new_x;
         y = new_y;
     }
@@ -85,8 +107,8 @@ void printMap() {
     }
 }
 
-double intersectWithHorizontalLine(double x, double y, double angle, double y_line) {
-    double sin_theta = sin(angle*PI/180.0);
+double intersectWithHorizontalLine(double x, double y, radian angle, double y_line) {
+    double sin_theta = sin(angle);
     if (abs(sin_theta) < 1e-8) {
         return 1e8;
     }
@@ -94,8 +116,8 @@ double intersectWithHorizontalLine(double x, double y, double angle, double y_li
     return ((y_line - y)/sin_theta);
 }
 
-double intersectWithVerticalLine(double x, double y, double angle, double x_line) {
-    double cos_theta = cos(angle*PI/180.0);
+double intersectWithVerticalLine(double x, double y, radian angle, double x_line) {
+    double cos_theta = cos(angle);
     if (abs(cos_theta) < 1e-8) {
         return 1e8;
     }
@@ -103,12 +125,12 @@ double intersectWithVerticalLine(double x, double y, double angle, double x_line
     return ((x_line - x)/cos_theta);
 }
 
-double shootRay(double x_start, double y_start, double angle, bool& hit_horizontal) {
+double shootRay(double x_start, double y_start, radian angle, bool& hit_horizontal) {
     int curr_x = int(floor(x_start));
     int curr_y = int(floor(y_start));
 
-    int delta_x = cos(angle*PI/180.0) > 0 ? 1 : -1;
-    int delta_y = sin(angle*PI/180.0) > 0 ? 1 : -1;
+    int delta_x = cos(angle) > 0 ? 1 : -1;
+    int delta_y = sin(angle) > 0 ? 1 : -1;
 
     double x_line, y_line;
     if (delta_x == -1) {
@@ -207,28 +229,28 @@ void renderTopDownMap(SDL_Window* window, SDL_Renderer* renderer, Player& player
     // Draw the viewing direction
     double x_start = player.x*PIXELS_PER_CELL;
     double y_start = player.y*PIXELS_PER_CELL; 
-    double x_end = x_start + (player.angle_visualizer_length*cos(player.angle*PI/180))*PIXELS_PER_CELL;
-    double y_end = y_start + (player.angle_visualizer_length*sin(player.angle*PI/180))*PIXELS_PER_CELL;
+    double x_end = x_start + (player.angle_visualizer_length*cos(player.angle))*PIXELS_PER_CELL;
+    double y_end = y_start + (player.angle_visualizer_length*sin(player.angle))*PIXELS_PER_CELL;
     SDL_RenderDrawLine(renderer, x_start, y_start, x_end, y_end); 
 
     // Draw the player field of view
-    x_end = x_start + (player.angle_visualizer_length*cos((player.angle-player.fov/2.0)*PI/180))*PIXELS_PER_CELL;
-    y_end = y_start + (player.angle_visualizer_length*sin((player.angle-player.fov/2.0)*PI/180))*PIXELS_PER_CELL;
+    x_end = x_start + (player.angle_visualizer_length*cos(player.angle-player.fov/2.0))*PIXELS_PER_CELL;
+    y_end = y_start + (player.angle_visualizer_length*sin(player.angle-player.fov/2.0))*PIXELS_PER_CELL;
     SDL_RenderDrawLine(renderer, x_start, y_start, x_end, y_end); 
-    x_end = x_start + (player.angle_visualizer_length*cos((player.angle+player.fov/2.0)*PI/180))*PIXELS_PER_CELL;
-    y_end = y_start + (player.angle_visualizer_length*sin((player.angle+player.fov/2.0)*PI/180))*PIXELS_PER_CELL;
+    x_end = x_start + (player.angle_visualizer_length*cos(player.angle+player.fov/2.0))*PIXELS_PER_CELL;
+    y_end = y_start + (player.angle_visualizer_length*sin(player.angle+player.fov/2.0))*PIXELS_PER_CELL;
     SDL_RenderDrawLine(renderer, x_start, y_start, x_end, y_end);
 
     // Visualize some of the rays being cast
     SDL_SetRenderDrawColor(renderer, 0, 255, 0, SDL_ALPHA_OPAQUE);
-    double focal_length = WIDTH/(2.0*tan(player.fov/2.0*PI/180.0));
+    double focal_length = WIDTH/(2.0*tan(player.fov/2.0));
     double depth = 0.0, angle = 0.0; 
     bool hit_horizontal = false;
     for (int pixel_col = 0; pixel_col < WIDTH; pixel_col += 8) {
-        angle = player.angle + atan((pixel_col - WIDTH/2.0)/focal_length)*180.0/PI; 
+        angle = player.angle + atan((pixel_col - WIDTH/2.0)/focal_length);
         depth = shootRay(player.x, player.y, angle, hit_horizontal);
-        x_end = x_start + (depth*cos((angle)*PI/180))*PIXELS_PER_CELL;
-        y_end = y_start + (depth*sin((angle)*PI/180))*PIXELS_PER_CELL;
+        x_end = x_start + (depth*cos(angle))*PIXELS_PER_CELL;
+        y_end = y_start + (depth*sin(angle))*PIXELS_PER_CELL;
         SDL_RenderDrawLine(renderer, x_start, y_start, x_end, y_end);
     }
 
@@ -241,14 +263,14 @@ void renderRayCasterWindow(SDL_Window* window, SDL_Surface* surface, Player& pla
  
     // Perform raycasting
     SDL_Rect srcRect, dstRect;
-    double focal_length = WIDTH/(2.0*tan(player.fov/2.0*PI/180.0));
+    double focal_length = WIDTH/(2.0*tan(player.fov/2.0));
     double depth = 0.0, angle = 0.0, height = 0.0, local_angle = 0.0, color = 200.0; 
     double x_start, x_end, y_start, y_end, fraction, x_hit, y_hit, x_fraction, y_fraction;
     bool hit_horizontal = false;
     int y_dst, x_src, y_src;
     Uint8 r, g, b;
     for (int pixel_col = 0; pixel_col < WIDTH; pixel_col++) {
-        local_angle = atan((pixel_col - WIDTH/2.0)/focal_length)*180.0/PI;  // local angle of ray in FOV,
+        local_angle = atan((pixel_col - WIDTH/2.0)/focal_length);  // local angle of ray in FOV,
                                                                             //zero being straight ahead
 
         angle = player.angle + local_angle; // angle of ray in global coordinates
@@ -256,14 +278,14 @@ void renderRayCasterWindow(SDL_Window* window, SDL_Surface* surface, Player& pla
 
         // We must distinguish between hits along horizontal or vertical walls to properly compute texture coordinates
         if (hit_horizontal == true) {
-            x_hit = player.x + depth*cos(angle*PI/180.0);
+            x_hit = player.x + depth*cos(angle);
             fraction = x_hit - floor(x_hit);
         } else {
-            y_hit = player.y + depth*sin(angle*PI/180.0);
+            y_hit = player.y + depth*sin(angle);
             fraction = y_hit - floor(y_hit);
         }
         x_src = (int)(wall_surface->w*fraction);
-        height = focal_length/cos(local_angle*PI/180.0)*BLOCK_HEIGHT/depth; // height of wall in pixels along this column 
+        height = focal_length/cos(local_angle)*BLOCK_HEIGHT/depth; // height of wall in pixels along this column
         
         for (int y_dst = HEIGHT/2.0 - height/2.0; y_dst < HEIGHT/2.0 + height/2.0; y_dst++) {
             y_src = int((y_dst-HEIGHT/2.0+height/2.0)/height*wall_surface->h);
@@ -287,9 +309,9 @@ void renderRayCasterWindow(SDL_Window* window, SDL_Surface* surface, Player& pla
             else if (y_dst >= HEIGHT) {
                 break;
             }
-            distance = BLOCK_HEIGHT/2.0*focal_length/((y_dst - HEIGHT/2.0)*cos(local_angle*PI/180.0));
-            xx = player.x + distance*cos(angle*PI/180.0);
-            yy = player.y + distance*sin(angle*PI/180.0);
+            distance = BLOCK_HEIGHT/2.0*focal_length/((y_dst - HEIGHT/2.0)*cos(local_angle));
+            xx = player.x + distance*cos(angle);
+            yy = player.y + distance*sin(angle);
             x_fraction = xx - floor(xx);
             y_fraction = yy - floor(yy);
 
@@ -358,20 +380,20 @@ int main(int argc, char * argv[]) {
 
             if (event.type == SDL_KEYDOWN) {
                 if (event.key.keysym.sym == SDLK_UP) {
-                    player.speed = 2.0; 
+                    player.speed = MOVEMENT_SPEED;
                 }
                 else if (event.key.keysym.sym == SDLK_DOWN) {
-                    player.speed = -2.0; 
+                    player.speed = -MOVEMENT_SPEED;
                 }
                 else if (event.key.keysym.sym == SDLK_LEFT) {
-                    player.angular_velocity = -120; 
+                    player.angular_velocity = -YAW_RATE;
                 }
                 else if (event.key.keysym.sym == SDLK_RIGHT) {
-                    player.angular_velocity = 120;
+                    player.angular_velocity = YAW_RATE;
                 }
                 else if (event.key.keysym.sym == SDLK_ESCAPE) {
                     // QUIT GAME
-                    quit = true; 
+                    quit = true;
                 }
             }
             if (event.type == SDL_KEYUP) {
@@ -389,7 +411,6 @@ int main(int argc, char * argv[]) {
         double delta_t = std::chrono::duration_cast<std::chrono::microseconds>(current_time - previous_time).count();
         delta_t = delta_t / 1e6;
         previous_time = current_time;
-
         player.move(delta_t);
 
         // Render the current frame
