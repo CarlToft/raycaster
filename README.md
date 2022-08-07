@@ -18,4 +18,6 @@ g++ main.cpp -l SDL2 -l SDL2_image
 
 ## Demo
 
-<img src="https://github.com/CarlToft/raycaster/blob/main/images/vis.gif"/>
+![Demo of raycaster](https://github.com/CarlToft/raycaster/blob/main/images/vis.gif?raw=true)
+
+
