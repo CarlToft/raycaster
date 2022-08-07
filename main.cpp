@@ -1,4 +1,5 @@
 #include <SDL2/SDL.h>
+#include <SDL2/SDL_ttf.h>
 #include <cmath>
 #include <iostream>
 #include <sstream>
@@ -328,7 +329,7 @@ void renderRayCasterWindow(SDL_Window* window, SDL_Surface* surface, Player& pla
         }
     }
 
-    SDL_UpdateWindowSurface(window);
+    //SDL_UpdateWindowSurface(window);
 }
 
 int main(int argc, char * argv[]) {
@@ -336,6 +337,13 @@ int main(int argc, char * argv[]) {
     const int TOP_DOWN_WINDOW_HEIGHT = PIXELS_PER_CELL*MAP_HEIGHT;
 
     SDL_Init(SDL_INIT_EVERYTHING);
+    // Initialize TTF
+    if (TTF_Init() == -1) {
+        printf("TTF_Init: %s\n", TTF_GetError());
+        exit(1);
+    }
+   std::string font_path = "fonts/arial.ttf";
+   TTF_Font* font = TTF_OpenFont(font_path.c_str(), 20);
 
     printMap(); 
 
@@ -416,6 +424,24 @@ int main(int argc, char * argv[]) {
         // Render the current frame
         renderTopDownMap(window_topdown, renderer_topdown, player);
         renderRayCasterWindow(window_3dview, surface_3dview, player);
+
+      // Render fps in window
+      std::stringstream ss;
+      ss << "FPS: " << 1.0/delta_t;
+
+      SDL_Color text_color = {255, 255, 255};
+      SDL_Surface* text_surface = TTF_RenderText_Solid(font, ss.str().c_str(), text_color);
+
+      // Blit into the 3d surface
+      SDL_Rect text_rect = {0, 0, text_surface->w, text_surface->h};
+      SDL_BlitSurface(text_surface, NULL, surface_3dview, &text_rect);
+
+      // Destroy the surface
+      SDL_FreeSurface(text_surface);
+
+      // Update window
+      SDL_UpdateWindowSurface(window_3dview);
+
     }
 
     // Quit
