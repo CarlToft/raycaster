@@ -18,7 +18,7 @@ git submodule update --init
 The program can be compiled using g++ like this:
 
 ```
-g++ main.cpp -O3 -l SDL2 -l SDL2_image -l SDL2_ttf
+g++ main.cpp -O3 -l SDL2 -l SDL2_image -l SDL2_ttf -pthread
 ```
 
 or using cmake:
