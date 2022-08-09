@@ -4,6 +4,7 @@
 #include <iostream>
 #include <sstream>
 #include <chrono>
+#include <thread>
 
 const int MAP_WIDTH = 10;
 const int MAP_HEIGHT = 10;
@@ -259,30 +260,30 @@ void renderTopDownMap(SDL_Window* window, SDL_Renderer* renderer, Player& player
     SDL_RenderPresent(renderer); 
 }
 
-void renderRayCasterWindow(SDL_Window* window, SDL_Surface* surface, Player& player) {
+void renderRayCasterWindow(SDL_Window* window, SDL_Surface* surface, Player* player, int col_start, int col_stop) {
     const double BLOCK_HEIGHT = 1.0;
  
     // Perform raycasting
     SDL_Rect srcRect, dstRect;
-    double focal_length = WIDTH/(2.0*tan(player.fov/2.0));
+    double focal_length = WIDTH/(2.0*tan(player->fov/2.0));
     double depth = 0.0, angle = 0.0, height = 0.0, local_angle = 0.0, color = 200.0; 
     double x_start, x_end, y_start, y_end, fraction, x_hit, y_hit, x_fraction, y_fraction;
     bool hit_horizontal = false;
     int y_dst, x_src, y_src;
     Uint8 r, g, b;
-    for (int pixel_col = 0; pixel_col < WIDTH; pixel_col++) {
+    for (int pixel_col = col_start; pixel_col < col_stop; pixel_col++) {
         local_angle = atan((pixel_col - WIDTH/2.0)/focal_length);  // local angle of ray in FOV,
                                                                             //zero being straight ahead
 
-        angle = player.angle + local_angle; // angle of ray in global coordinates
-        depth = shootRay(player.x, player.y, angle, hit_horizontal); // distance to hit
+        angle = player->angle + local_angle; // angle of ray in global coordinates
+        depth = shootRay(player->x, player->y, angle, hit_horizontal); // distance to hit
 
         // We must distinguish between hits along horizontal or vertical walls to properly compute texture coordinates
         if (hit_horizontal == true) {
-            x_hit = player.x + depth*cos(angle);
+            x_hit = player->x + depth*cos(angle);
             fraction = x_hit - floor(x_hit);
         } else {
-            y_hit = player.y + depth*sin(angle);
+            y_hit = player->y + depth*sin(angle);
             fraction = y_hit - floor(y_hit);
         }
         x_src = (int)(wall_surface->w*fraction);
@@ -311,8 +312,8 @@ void renderRayCasterWindow(SDL_Window* window, SDL_Surface* surface, Player& pla
                 break;
             }
             distance = BLOCK_HEIGHT/2.0*focal_length/((y_dst - HEIGHT/2.0)*cos(local_angle));
-            xx = player.x + distance*cos(angle);
-            yy = player.y + distance*sin(angle);
+            xx = player->x + distance*cos(angle);
+            yy = player->y + distance*sin(angle);
             x_fraction = xx - floor(xx);
             y_fraction = yy - floor(yy);
 
@@ -423,7 +424,10 @@ int main(int argc, char * argv[]) {
 
         // Render the current frame
         renderTopDownMap(window_topdown, renderer_topdown, player);
-        renderRayCasterWindow(window_3dview, surface_3dview, player);
+        std::thread thread1(renderRayCasterWindow, window_3dview, surface_3dview, &player, 0, 320);
+        std::thread thread2(renderRayCasterWindow, window_3dview, surface_3dview, &player, 320, 640);
+        thread1.join();
+        thread2.join();
 
         // Render fps in window
         std::stringstream ss;
