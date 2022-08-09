@@ -425,23 +425,22 @@ int main(int argc, char * argv[]) {
         renderTopDownMap(window_topdown, renderer_topdown, player);
         renderRayCasterWindow(window_3dview, surface_3dview, player);
 
-      // Render fps in window
-      std::stringstream ss;
-      ss << "FPS: " << 1.0/delta_t;
+        // Render fps in window
+        std::stringstream ss;
+        ss << "FPS: " << 1.0/delta_t;
 
-      SDL_Color text_color = {255, 255, 255};
-      SDL_Surface* text_surface = TTF_RenderText_Solid(font, ss.str().c_str(), text_color);
+        SDL_Color text_color = {255, 255, 255};
+        SDL_Surface* text_surface = TTF_RenderText_Solid(font, ss.str().c_str(), text_color);
 
-      // Blit into the 3d surface
-      SDL_Rect text_rect = {0, 0, text_surface->w, text_surface->h};
-      SDL_BlitSurface(text_surface, NULL, surface_3dview, &text_rect);
+        // Blit into the 3d surface
+        SDL_Rect text_rect = {0, 0, text_surface->w, text_surface->h};
+        SDL_BlitSurface(text_surface, NULL, surface_3dview, &text_rect);
 
-      // Destroy the surface
-      SDL_FreeSurface(text_surface);
+        // Destroy the surface
+        SDL_FreeSurface(text_surface);
 
-      // Update window
-      SDL_UpdateWindowSurface(window_3dview);
-
+        // Update window
+        SDL_UpdateWindowSurface(window_3dview);
     }
 
     // Quit

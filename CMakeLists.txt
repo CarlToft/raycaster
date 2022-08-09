@@ -27,7 +27,7 @@ if(WIN32)
 else()
     list(APPEND SDL_LIBRARIES
         SDL2::Main
-            SDL2::TTF)
+        SDL2::TTF)
 endif()
 
 # Debug message with the list of libraries we need to link with.
