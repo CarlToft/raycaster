@@ -1,6 +1,6 @@
 # Raycaster
 
-This is a simple "from-scratch" raycaster implementation in C++ using SDL2. This implementation uses some pretty sketchy memory accessing for reading and setting RGB values in the SDL_Surface pixel data, but it was the fastest way I could come up with. You have been warned; don't blame me if it crasches your computer! 
+This is a simple "from-scratch" raycaster implementation in C++ using SDL2. This implementation uses some pretty sketchy memory accessing for reading and setting RGB values in the SDL_Surface pixel data, but it was the fastest way I could come up with. You have been warned; don't blame me if it crasches your computer!
 
 ## Dependencies
 You will need to install SDL2 and SDL2-Image. On Ubuntu, you can install them like this:
@@ -18,7 +18,7 @@ git submodule update --init
 The program can be compiled using g++ like this:
 
 ```
-g++ main.cpp -l SDL2 -l SDL2_image
+g++ main.cpp -O3 -l SDL2 -l SDL2_image -l SDL2_ttf
 ```
 
 or using cmake:
@@ -40,5 +40,3 @@ cmake -DCMAKE_TOOLCHAIN_FILE={VCPKG_PATH}/scripts/buildsystems/vcpkg.cmake ..
 ## Demo
 
 ![Demo of raycaster](https://github.com/CarlToft/raycaster/blob/main/images/vis.gif?raw=true)
-
-
