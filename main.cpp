@@ -69,6 +69,57 @@ Player::Player() {
     angle_visualizer_length = 5.0;
 }
 
+class Vector {
+    public:
+        double coords[3];
+        double norm();
+        void normalize();
+        Vector(double x, double y, double z);
+        Vector add(const Vector &a, const Vector &b);
+        Vector subtract(const Vector &a, const Vector &b);
+        double dot(const Vector &a);
+};
+
+Vector::Vector(double x, double y, double z) {
+    coords[0] = x;
+    coords[1] = y;
+    coords[2] = z;
+}
+
+double Vector::norm() {
+    return sqrt(coords[0]*coords[0] + coords[1]*coords[1] + coords[2]*coords[2]);
+}
+
+void Vector::normalize() {
+    double length = this->norm();
+    coords[0] = coords[0] / length;
+    coords[1] = coords[1] / length;
+    coords[2] = coords[2] / length;
+}
+
+Vector Vector::add(const Vector &a, const Vector &b) {
+    Vector result(a.coords[0] + b.coords[0], a.coords[1] + b.coords[1], a.coords[2] + b.coords[2]);
+    return result;
+}
+
+Vector Vector::subtract(const Vector &a, const Vector &b) {
+    Vector result(a.coords[0] - b.coords[0], a.coords[1] - b.coords[1], a.coords[2] - b.coords[2]);
+    return result;
+}
+
+double Vector::dot(const Vector &a) {
+    return coords[0]*a.coords[0] + coords[1]*a.coords[1] + coords[2]*a.coords[2]; 
+}
+
+double min(double a, double b) {
+    return a < b ? a : b;
+}
+
+double LIGHT_X = 5.5;
+double LIGHT_Y = 5.5;
+double LIGHT_Z = 0.5;
+const double LIGHTWIDTH = 10.0; // size of light (in pixels) in top-down map 
+
 // Move the player. delta_t is the time in seconds since the last update
 void Player::move(double delta_t) {
 
@@ -85,6 +136,14 @@ void Player::move(double delta_t) {
         y = new_y;
     }
     angle = angle + angular_velocity*delta_t;
+
+    // Keep the player angle in the interval [0, 2*pi]
+    if (angle < 0.0) {
+        angle = angle + 2*PI;
+    }
+    if (angle > 2.0*PI) {
+        angle = angle - 2.0*PI;
+    }
 }
 
 // TODO: These two methods are super sketchy, and might crash for images other than the
@@ -218,6 +277,14 @@ void renderTopDownMap(SDL_Window* window, SDL_Renderer* renderer, Player& player
         SDL_RenderFillRect(renderer, &rect); 
     }
 
+    // Draw the light source
+    rect.x = LIGHT_X*PIXELS_PER_CELL - LIGHTWIDTH/2.0;
+    rect.y = LIGHT_Y*PIXELS_PER_CELL - LIGHTWIDTH/2.0;
+    rect.w = LIGHTWIDTH;
+    rect.h = LIGHTWIDTH;
+    SDL_SetRenderDrawColor(renderer, 255, 0 ,0, SDL_ALPHA_OPAQUE);
+    SDL_RenderFillRect(renderer, &rect); 
+
     // Draw the player
     const double PLAYER_WIDTH = 10.0; 
     const double PLAYER_HEIGHT = 10.0; 
@@ -266,30 +333,58 @@ void renderRayCasterWindow(SDL_Window* window, SDL_Surface* surface, Player* pla
     // Perform raycasting
     SDL_Rect srcRect, dstRect;
     double focal_length = WIDTH/(2.0*tan(player->fov/2.0));
+    double focal_length_prime;
     double depth = 0.0, angle = 0.0, height = 0.0, local_angle = 0.0, color = 200.0; 
-    double x_start, x_end, y_start, y_end, fraction, x_hit, y_hit, x_fraction, y_fraction;
+    double x_start, x_end, y_start, y_end, fraction, x_hit, y_hit, x_fraction, y_fraction, z_hit, light_intensity, light_distance;
+    Vector lightVec(0.0, 0.0, 0.0);
     bool hit_horizontal = false;
     int y_dst, x_src, y_src;
     Uint8 r, g, b;
+    Vector surfaceNormal(0.0, 0.0, 0.0);
     for (int pixel_col = col_start; pixel_col < col_stop; pixel_col++) {
         local_angle = atan((pixel_col - WIDTH/2.0)/focal_length);  // local angle of ray in FOV,
                                                                             //zero being straight ahead
 
         angle = player->angle + local_angle; // angle of ray in global coordinates
+        if (angle < 0.0) {
+            angle = angle + 2.0*PI;
+        } else if (angle > 2.0*PI) {
+            angle = angle - 2.0*PI;
+        }
         depth = shootRay(player->x, player->y, angle, hit_horizontal); // distance to hit
 
         // We must distinguish between hits along horizontal or vertical walls to properly compute texture coordinates
+        x_hit = player->x + depth*cos(angle);
+        y_hit = player->y + depth*sin(angle);
         if (hit_horizontal == true) {
-            x_hit = player->x + depth*cos(angle);
+            if (angle < PI) {
+                surfaceNormal.coords[0] = 0.0;
+                surfaceNormal.coords[1] = -1.0;
+                surfaceNormal.coords[2] = 0.0;
+            } else {
+                surfaceNormal.coords[0] = 0.0;
+                surfaceNormal.coords[1] = 1.0;
+                surfaceNormal.coords[2] = 0.0;        
+            }
             fraction = x_hit - floor(x_hit);
         } else {
-            y_hit = player->y + depth*sin(angle);
             fraction = y_hit - floor(y_hit);
+            if (angle < PI/2.0 || (angle > 3.0/2.0*PI)) {
+                surfaceNormal.coords[0] = -1.0;
+                surfaceNormal.coords[1] = 0.0;
+                surfaceNormal.coords[2] = 0.0;
+            } else {
+                surfaceNormal.coords[0] = 1.0;
+                surfaceNormal.coords[1] = 0.0;
+                surfaceNormal.coords[2] = 0.0;        
+            }
         }
         x_src = (int)(wall_surface->w*fraction);
-        height = focal_length/cos(local_angle)*BLOCK_HEIGHT/depth; // height of wall in pixels along this column
+        focal_length_prime = focal_length/cos(local_angle);
+        height = focal_length_prime*BLOCK_HEIGHT/depth; // height of wall in pixels along this column
         
         for (int y_dst = HEIGHT/2.0 - height/2.0; y_dst < HEIGHT/2.0 + height/2.0; y_dst++) {
+            // Sample texture RGB value
             y_src = int((y_dst-HEIGHT/2.0+height/2.0)/height*wall_surface->h);
             if (y_dst < 0) {
                 y_dst = -1;
@@ -297,8 +392,25 @@ void renderRayCasterWindow(SDL_Window* window, SDL_Surface* surface, Player* pla
             } else if (y_dst >= HEIGHT) {
                 break;
             }
+
+            // Compute shading
+            z_hit = BLOCK_HEIGHT/2.0 - depth*(y_dst - HEIGHT/2-0)/focal_length_prime;
+            lightVec.coords[0] = LIGHT_X - x_hit;
+            lightVec.coords[1] = LIGHT_Y - y_hit;
+            lightVec.coords[2] = LIGHT_Z - z_hit;
+            light_distance = lightVec.norm();
+            //lightVec.normalize();
+            
             get_pixel(wall_surface, x_src, y_src, b, g, r);
-            Uint8 color_scaling = 255 - int((depth/20.0)*255);
+            light_intensity = lightVec.dot(surfaceNormal)/(light_distance*light_distance*2);
+            if (light_intensity < 0.0) {
+                light_intensity = 0.0;
+            }
+            light_intensity = light_intensity + 0.25;
+            //std::cout << light_intensity << "\n"; 
+            r = (Uint8)(min(255, r*light_intensity));
+            g = (Uint8)(min(255, g*light_intensity));
+            b = (Uint8)(min(255, b*light_intensity));
             set_pixel(surface, pixel_col, y_dst, r, g, b);
         }
 
@@ -314,18 +426,52 @@ void renderRayCasterWindow(SDL_Window* window, SDL_Surface* surface, Player* pla
             distance = BLOCK_HEIGHT/2.0*focal_length/((y_dst - HEIGHT/2.0)*cos(local_angle));
             xx = player->x + distance*cos(angle);
             yy = player->y + distance*sin(angle);
+            x_hit = xx;
+            y_hit = yy;
             x_fraction = xx - floor(xx);
             y_fraction = yy - floor(yy);
 
             // Draw the floor
+            surfaceNormal.coords[0] = 0.0;
+            surfaceNormal.coords[1] = 0.0;
+            surfaceNormal.coords[2] = 1.0;
+            z_hit = 0.0;
+            lightVec.coords[0] = LIGHT_X - x_hit; 
+            lightVec.coords[1] = LIGHT_Y - y_hit;
+            lightVec.coords[2] = LIGHT_Z - z_hit;
+            light_distance = lightVec.norm();
+            //lightVec.normalize();
+            light_intensity = lightVec.dot(surfaceNormal)/(light_distance*light_distance*2);
+            if (light_intensity < 0.0) {
+                light_intensity = 0.0;
+            }
+            light_intensity = light_intensity + 0.25;
+            
             x_src = (int)(x_fraction*floor_surface->w);
             y_src = (int)(y_fraction*floor_surface->h);
             get_pixel(floor_surface, x_src, y_src, b, g, r);
+            r = (Uint8)(min(255, r*light_intensity));
+            g = (Uint8)(min(255, g*light_intensity));
+            b = (Uint8)(min(255, b*light_intensity));
             set_pixel(surface, pixel_col, y_dst, r, g, b);
+
+            // Draw the ceiling
+            surfaceNormal.coords[2] = -1.0;
+            z_hit = 1.0;
+            lightVec.coords[2] = LIGHT_Z - z_hit;
+            light_distance = lightVec.norm();
+            light_intensity = lightVec.dot(surfaceNormal)/(light_distance*light_distance*2);
+            if (light_intensity < 0.0) {
+                light_intensity = 0.0;
+            }
+            light_intensity = light_intensity + 0.25;
+
             x_src = (int)(x_fraction*ceiling_surface->w);
             y_src = (int)(y_fraction*ceiling_surface->h);
-            // Draw the ceiling
             get_pixel(ceiling_surface, x_src, y_src, b, g, r);
+            r = (Uint8)(min(255, r*light_intensity));
+            g = (Uint8)(min(255, g*light_intensity));
+            b = (Uint8)(min(255, b*light_intensity));
             set_pixel(surface, pixel_col, HEIGHT - y_dst - 1, r, g, b);
         }
     }
@@ -345,8 +491,10 @@ int main(int argc, char * argv[]) {
     }
    std::string font_path = "fonts/arial.ttf";
    TTF_Font* font = TTF_OpenFont(font_path.c_str(), 20);
-
-    printMap(); 
+   
+   // Print some help info
+   std::cout << "You can add / remove walls by clicking in the top-down view.\n";
+   std::cout << "The light is also moveable by clicking on it in the top-down view and dragging it\naround using the mouse.\n";
 
     // Create windows
     SDL_Window* window_topdown = NULL;
@@ -378,6 +526,7 @@ int main(int argc, char * argv[]) {
     auto previous_time = std::chrono::system_clock::now();
     SDL_Event event; 
     bool quit = false;
+    bool is_moving_light = false;
     while (quit == false) {
         // Check for player inputs
         while (SDL_PollEvent(&event) != 0) {
@@ -411,6 +560,34 @@ int main(int argc, char * argv[]) {
                 }
                 else if (event.key.keysym.sym == SDLK_LEFT || event.key.keysym.sym == SDLK_RIGHT) {
                     player.angular_velocity = 0.0; 
+                }
+            }
+            if (event.type == SDL_MOUSEBUTTONDOWN) {
+                if (event.button.x >= LIGHT_X*PIXELS_PER_CELL - LIGHTWIDTH/2.0 && event.button.x <= LIGHT_X*PIXELS_PER_CELL + LIGHTWIDTH/2.0) {
+                    if (event.button.y >= LIGHT_Y*PIXELS_PER_CELL - LIGHTWIDTH/2.0 && event.button.y <= LIGHT_Y*PIXELS_PER_CELL + LIGHTWIDTH/2.0) {
+                        is_moving_light = true;
+                    }
+                } else {
+                    if (event.button.x > PIXELS_PER_CELL && event.button.x < (MAP_WIDTH-1)*PIXELS_PER_CELL) {
+                        if (event.button.y > PIXELS_PER_CELL && event.button.y < (MAP_HEIGHT-1)*PIXELS_PER_CELL) {
+                            int x_cell = (int)(event.button.x / PIXELS_PER_CELL);
+                            int y_cell = (int)(event.button.y / PIXELS_PER_CELL);
+                            int player_x_cell = (int)(floor(player.x));
+                            int player_y_cell = (int)(floor(player.y));
+                            if (x_cell != player_x_cell || y_cell != player_y_cell) {
+                                MAP[y_cell][x_cell] = !MAP[y_cell][x_cell];
+                            }
+                        }
+                    }
+                }
+            }
+            if (event.type == SDL_MOUSEBUTTONUP) {
+                is_moving_light = false;
+            }
+            if (event.type == SDL_MOUSEMOTION) {
+                if (is_moving_light) {
+                    LIGHT_X = event.motion.x / PIXELS_PER_CELL;
+                    LIGHT_Y = event.motion.y / PIXELS_PER_CELL;
                 }
             }
         }
