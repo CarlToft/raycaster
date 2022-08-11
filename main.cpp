@@ -186,7 +186,8 @@ double intersectWithVerticalLine(double x, double y, radian angle, double x_line
     return ((x_line - x)/cos_theta);
 }
 
-double shootRay(double x_start, double y_start, radian angle, bool& hit_horizontal) {
+double shootRay(double x_start, double y_start, radian angle, bool& hit_horizontal, Vector &surfaceNormal) {
+    double return_val;
     int curr_x = int(floor(x_start));
     int curr_y = int(floor(y_start));
 
@@ -214,7 +215,8 @@ double shootRay(double x_start, double y_start, radian angle, bool& hit_horizont
             curr_y = curr_y + delta_y;
             if (MAP[curr_y][curr_x] == true) {
                 hit_horizontal = true;
-                return horizontal_line_distance;
+                return_val = horizontal_line_distance;
+                break;
             }
 
             y_line = y_line + delta_y;
@@ -223,13 +225,39 @@ double shootRay(double x_start, double y_start, radian angle, bool& hit_horizont
             curr_x = curr_x + delta_x;
             if (MAP[curr_y][curr_x] == true) {
                 hit_horizontal = false;
-                return vertical_line_distance;
+                return_val = vertical_line_distance;
+                break;
             }
 
             x_line = x_line + delta_x;
             vertical_line_distance = intersectWithVerticalLine(x_start, y_start, angle, x_line);
         }
-    } 
+    }
+
+    // Return surface normal at the hit location
+    if (hit_horizontal == true) {
+        if (angle < PI) {
+            surfaceNormal.coords[0] = 0.0;
+            surfaceNormal.coords[1] = -1.0;
+            surfaceNormal.coords[2] = 0.0;
+        } else {
+            surfaceNormal.coords[0] = 0.0;
+            surfaceNormal.coords[1] = 1.0;
+            surfaceNormal.coords[2] = 0.0;        
+        }
+    } else {
+        if (angle < PI/2.0 || (angle > 3.0/2.0*PI)) {
+            surfaceNormal.coords[0] = -1.0;
+            surfaceNormal.coords[1] = 0.0;
+            surfaceNormal.coords[2] = 0.0;
+        } else {
+            surfaceNormal.coords[0] = 1.0;
+            surfaceNormal.coords[1] = 0.0;
+            surfaceNormal.coords[2] = 0.0;        
+        }
+    }
+
+    return return_val;
 }
 
 void renderTopDownMap(SDL_Window* window, SDL_Renderer* renderer, Player& player) {
@@ -315,9 +343,10 @@ void renderTopDownMap(SDL_Window* window, SDL_Renderer* renderer, Player& player
     double focal_length = WIDTH/(2.0*tan(player.fov/2.0));
     double depth = 0.0, angle = 0.0; 
     bool hit_horizontal = false;
+    Vector surfaceNormal(0.0, 0.0, 0.0);
     for (int pixel_col = 0; pixel_col < WIDTH; pixel_col += 8) {
         angle = player.angle + atan((pixel_col - WIDTH/2.0)/focal_length);
-        depth = shootRay(player.x, player.y, angle, hit_horizontal);
+        depth = shootRay(player.x, player.y, angle, hit_horizontal, surfaceNormal);
         x_end = x_start + (depth*cos(angle))*PIXELS_PER_CELL;
         y_end = y_start + (depth*sin(angle))*PIXELS_PER_CELL;
         SDL_RenderDrawLine(renderer, x_start, y_start, x_end, y_end);
@@ -351,33 +380,15 @@ void renderRayCasterWindow(SDL_Window* window, SDL_Surface* surface, Player* pla
         } else if (angle > 2.0*PI) {
             angle = angle - 2.0*PI;
         }
-        depth = shootRay(player->x, player->y, angle, hit_horizontal); // distance to hit
+        depth = shootRay(player->x, player->y, angle, hit_horizontal, surfaceNormal); // distance to hit
 
         // We must distinguish between hits along horizontal or vertical walls to properly compute texture coordinates
         x_hit = player->x + depth*cos(angle);
         y_hit = player->y + depth*sin(angle);
         if (hit_horizontal == true) {
-            if (angle < PI) {
-                surfaceNormal.coords[0] = 0.0;
-                surfaceNormal.coords[1] = -1.0;
-                surfaceNormal.coords[2] = 0.0;
-            } else {
-                surfaceNormal.coords[0] = 0.0;
-                surfaceNormal.coords[1] = 1.0;
-                surfaceNormal.coords[2] = 0.0;        
-            }
             fraction = x_hit - floor(x_hit);
         } else {
             fraction = y_hit - floor(y_hit);
-            if (angle < PI/2.0 || (angle > 3.0/2.0*PI)) {
-                surfaceNormal.coords[0] = -1.0;
-                surfaceNormal.coords[1] = 0.0;
-                surfaceNormal.coords[2] = 0.0;
-            } else {
-                surfaceNormal.coords[0] = 1.0;
-                surfaceNormal.coords[1] = 0.0;
-                surfaceNormal.coords[2] = 0.0;        
-            }
         }
         x_src = (int)(wall_surface->w*fraction);
         focal_length_prime = focal_length/cos(local_angle);
@@ -399,7 +410,6 @@ void renderRayCasterWindow(SDL_Window* window, SDL_Surface* surface, Player* pla
             lightVec.coords[1] = LIGHT_Y - y_hit;
             lightVec.coords[2] = LIGHT_Z - z_hit;
             light_distance = lightVec.norm();
-            //lightVec.normalize();
             
             get_pixel(wall_surface, x_src, y_src, b, g, r);
             light_intensity = lightVec.dot(surfaceNormal)/(light_distance*light_distance*2);
