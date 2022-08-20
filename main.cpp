@@ -11,6 +11,7 @@ const int MAP_HEIGHT = 10;
 const int WIDTH = 640; 
 const int HEIGHT = 480;
 const double PIXELS_PER_CELL = 70; 
+const double AMBIENT_LIGHT = 0.4;
 constexpr double PI = 3.1415926535897932384626;
 
 using radian = double;
@@ -186,7 +187,51 @@ double intersectWithVerticalLine(double x, double y, radian angle, double x_line
     return ((x_line - x)/cos_theta);
 }
 
-double shootRay(double x_start, double y_start, radian angle, bool& hit_horizontal, Vector &surfaceNormal) {
+bool isPathClear(double x_start, double y_start, double x_dest, double y_dest, int destination_row, int destination_col) {
+    double angle = atan2(y_dest - y_start, x_dest - x_start);
+    int curr_x = int(floor(x_start));
+    int curr_y = int(floor(y_start));
+
+    int delta_x = cos(angle) > 0 ? 1 : -1;
+    int delta_y = sin(angle) > 0 ? 1 : -1;
+
+    double x_line, y_line;
+    if (delta_x == -1) {
+        x_line = floor(x_start);
+    } else {
+        x_line = floor(x_start) + delta_x;
+    }
+    if (delta_y == -1) {
+        y_line = floor(y_start);
+    } else {
+        y_line = floor(y_start) + delta_y;
+    }
+
+    double horizontal_line_distance = intersectWithHorizontalLine(x_start, y_start, angle, y_line);
+    double vertical_line_distance = intersectWithVerticalLine(x_start, y_start, angle, x_line);
+
+    while (true) {
+        if (curr_x == destination_col && curr_y == destination_row) {
+            return true;
+        }
+        if (horizontal_line_distance < vertical_line_distance) {
+            // We intersected the horizontal line
+            curr_y = curr_y + delta_y;
+            y_line = y_line + delta_y;
+            horizontal_line_distance = intersectWithHorizontalLine(x_start, y_start, angle, y_line);
+        } else {
+            curr_x = curr_x + delta_x;
+            x_line = x_line + delta_x;
+            vertical_line_distance = intersectWithVerticalLine(x_start, y_start, angle, x_line);
+        }
+
+        if (MAP[curr_y][curr_x] == true) {
+            return false;
+        }
+    }
+}
+
+double shootRay(double x_start, double y_start, radian angle, bool& hit_horizontal, Vector &surfaceNormal, int &lastFreeCol, int &lastFreeRow) {
     double return_val;
     int curr_x = int(floor(x_start));
     int curr_y = int(floor(y_start));
@@ -216,6 +261,8 @@ double shootRay(double x_start, double y_start, radian angle, bool& hit_horizont
             if (MAP[curr_y][curr_x] == true) {
                 hit_horizontal = true;
                 return_val = horizontal_line_distance;
+                lastFreeRow = curr_y - delta_y;
+                lastFreeCol = curr_x;
                 break;
             }
 
@@ -226,6 +273,8 @@ double shootRay(double x_start, double y_start, radian angle, bool& hit_horizont
             if (MAP[curr_y][curr_x] == true) {
                 hit_horizontal = false;
                 return_val = vertical_line_distance;
+                lastFreeRow = curr_y;
+                lastFreeCol = curr_x - delta_x;
                 break;
             }
 
@@ -343,10 +392,11 @@ void renderTopDownMap(SDL_Window* window, SDL_Renderer* renderer, Player& player
     double focal_length = WIDTH/(2.0*tan(player.fov/2.0));
     double depth = 0.0, angle = 0.0; 
     bool hit_horizontal = false;
+    int free_col, free_row;
     Vector surfaceNormal(0.0, 0.0, 0.0);
     for (int pixel_col = 0; pixel_col < WIDTH; pixel_col += 8) {
         angle = player.angle + atan((pixel_col - WIDTH/2.0)/focal_length);
-        depth = shootRay(player.x, player.y, angle, hit_horizontal, surfaceNormal);
+        depth = shootRay(player.x, player.y, angle, hit_horizontal, surfaceNormal, free_col, free_row);
         x_end = x_start + (depth*cos(angle))*PIXELS_PER_CELL;
         y_end = y_start + (depth*sin(angle))*PIXELS_PER_CELL;
         SDL_RenderDrawLine(renderer, x_start, y_start, x_end, y_end);
@@ -370,6 +420,7 @@ void renderRayCasterWindow(SDL_Window* window, SDL_Surface* surface, Player* pla
     int y_dst, x_src, y_src;
     Uint8 r, g, b;
     Vector surfaceNormal(0.0, 0.0, 0.0);
+    bool free_sight;
     for (int pixel_col = col_start; pixel_col < col_stop; pixel_col++) {
         local_angle = atan((pixel_col - WIDTH/2.0)/focal_length);  // local angle of ray in FOV,
                                                                             //zero being straight ahead
@@ -380,7 +431,8 @@ void renderRayCasterWindow(SDL_Window* window, SDL_Surface* surface, Player* pla
         } else if (angle > 2.0*PI) {
             angle = angle - 2.0*PI;
         }
-        depth = shootRay(player->x, player->y, angle, hit_horizontal, surfaceNormal); // distance to hit
+        int free_col, free_row;
+        depth = shootRay(player->x, player->y, angle, hit_horizontal, surfaceNormal, free_col, free_row); // distance to hit
 
         // We must distinguish between hits along horizontal or vertical walls to properly compute texture coordinates
         x_hit = player->x + depth*cos(angle);
@@ -393,6 +445,7 @@ void renderRayCasterWindow(SDL_Window* window, SDL_Surface* surface, Player* pla
         x_src = (int)(wall_surface->w*fraction);
         focal_length_prime = focal_length/cos(local_angle);
         height = focal_length_prime*BLOCK_HEIGHT/depth; // height of wall in pixels along this column
+        free_sight = isPathClear(LIGHT_X, LIGHT_Y, x_hit, y_hit, free_row, free_col);
         
         for (int y_dst = HEIGHT/2.0 - height/2.0; y_dst < HEIGHT/2.0 + height/2.0; y_dst++) {
             // Sample texture RGB value
@@ -413,10 +466,10 @@ void renderRayCasterWindow(SDL_Window* window, SDL_Surface* surface, Player* pla
             
             get_pixel(wall_surface, x_src, y_src, b, g, r);
             light_intensity = lightVec.dot(surfaceNormal)/(light_distance*light_distance*2);
-            if (light_intensity < 0.0) {
+            if (light_intensity < 0.0 || free_sight == false) {
                 light_intensity = 0.0;
             }
-            light_intensity = light_intensity + 0.25;
+            light_intensity = light_intensity + AMBIENT_LIGHT;
             //std::cout << light_intensity << "\n"; 
             r = (Uint8)(min(255, r*light_intensity));
             g = (Uint8)(min(255, g*light_intensity));
@@ -442,6 +495,10 @@ void renderRayCasterWindow(SDL_Window* window, SDL_Surface* surface, Player* pla
             y_fraction = yy - floor(yy);
 
             // Draw the floor
+            free_row = (int)(floor(y_hit));
+            free_col = (int)(floor(x_hit));
+            free_sight = isPathClear(LIGHT_X, LIGHT_Y, x_hit, y_hit, free_row, free_col);
+
             surfaceNormal.coords[0] = 0.0;
             surfaceNormal.coords[1] = 0.0;
             surfaceNormal.coords[2] = 1.0;
@@ -450,12 +507,11 @@ void renderRayCasterWindow(SDL_Window* window, SDL_Surface* surface, Player* pla
             lightVec.coords[1] = LIGHT_Y - y_hit;
             lightVec.coords[2] = LIGHT_Z - z_hit;
             light_distance = lightVec.norm();
-            //lightVec.normalize();
             light_intensity = lightVec.dot(surfaceNormal)/(light_distance*light_distance*2);
-            if (light_intensity < 0.0) {
+            if (light_intensity < 0.0 || free_sight == false) {
                 light_intensity = 0.0;
             }
-            light_intensity = light_intensity + 0.25;
+            light_intensity = light_intensity + AMBIENT_LIGHT;
             
             x_src = (int)(x_fraction*floor_surface->w);
             y_src = (int)(y_fraction*floor_surface->h);
@@ -471,7 +527,7 @@ void renderRayCasterWindow(SDL_Window* window, SDL_Surface* surface, Player* pla
             lightVec.coords[2] = LIGHT_Z - z_hit;
             light_distance = lightVec.norm();
             light_intensity = lightVec.dot(surfaceNormal)/(light_distance*light_distance*2);
-            if (light_intensity < 0.0) {
+            if (light_intensity < 0.0 || free_sight == false) {
                 light_intensity = 0.0;
             }
             light_intensity = light_intensity + 0.25;
